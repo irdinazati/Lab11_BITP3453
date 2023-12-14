@@ -39,12 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: FadeInImage.memoryNetwork(
-                    placeholder: kTransparentImage,
-                    image: "assests/expenses.jpg",
-                    height:310
-                ),
-              ),
+                child: Image.asset('assets/daily.png')),
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: TextField(
