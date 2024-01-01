@@ -1,151 +1,128 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
 import 'Controller/request_controller.dart';
-import 'Controller/sqlite_db.dart';
 import 'Model/expense.dart';
 
-/*void main() {
-  runApp(DailyExpensesApp(username:''));
-}*/
-
 class DailyExpensesApp extends StatelessWidget {
+
+  // Constructor parameter to accept the Username value
   final String username;
-  DailyExpensesApp({required this.username});
+  const DailyExpensesApp({required this.username});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: ExpenseList(username:username),
+      // username will be passed to ExpenseList()
+      home: ExpenseList(username: username),
     );
   }
 }
 
 class ExpenseList extends StatefulWidget {
+
+  // Constructor parameter to accept the Username value
   final String username;
   ExpenseList({required this.username});
 
   @override
-  _ExpenseListState createState() => _ExpenseListState();
+  State<ExpenseList> createState() => _ExpenseListState();
 }
 
 class _ExpenseListState extends State<ExpenseList> {
 
+  /**
+   * By accepting the username parameter in both
+   * the DailyExpensesApp and ExpenseList constructors,
+   * you enable the passing of the username value from the
+   * parent screen (in this case, DailyExpensesApp) to the
+   * child screen (in this case, ExpenseList).
+   * This allows you to use the username value on the
+   * ExpenseList screen.
+   */
   final List<Expense> expenses = [];
   final TextEditingController descriptionController = TextEditingController();
   final TextEditingController amountController = TextEditingController();
-  final TextEditingController totalAmountController = TextEditingController();
+  final TextEditingController totalController = TextEditingController();
   final TextEditingController txtDateController = TextEditingController();
-  double totalAmount = 0.0; // To store the total spending.
+  double total = 0.0;
+  // added new parameter for Expense Constructor = DateTime text
 
   void _addExpense() async{
     String description = descriptionController.text.trim();
     String amount = amountController.text.trim();
-    if (description.isNotEmpty && amount.isNotEmpty) {
-      Expense exp =
-      Expense(double.parse(amount), description, txtDateController.text);
-      if (await exp.save()){
+    int id = 0;
+
+    if(description.isNotEmpty && amount.isNotEmpty){
+      Expense exp
+      = Expense(0, double.parse(amount), description, txtDateController.text);
+
+      if(await exp.save()){
         setState(() {
-          //final double expenseAmount = double.parse(amount);
-          expenses.add(exp);//(Expense(description, amount));
+          expenses.add(exp);
           descriptionController.clear();
           amountController.clear();
           calculateTotal();
         });
-      } else{
+      }else{
         _showMessage("Failed to save Expenses data");
-
       }
     }
   }
 
-  void calculateTotal() {
-    totalAmount = 0;
-    for (Expense ex in expenses) {
-      totalAmount += ex.amount;
+  void calculateTotal(){
+    total = 0;
+    for(Expense ex in expenses) {
+      total += ex.amount;
     }
-    totalAmountController.text = totalAmount.toString();
+    totalController.text = total.toString();
   }
 
-// Navigate to edit screen
-  void _editExpense(int index) async {
-    final editedExpense = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EditExpenseScreen(
-          expense: expenses[index],
-          onSave: (editedExpense) {
-            setState(() {
-              totalAmount -= expenses[index].amount; // Deduct the original amount
-              totalAmount += editedExpense.amount; // Add the edited amount
-              expenses[index] = editedExpense;
-              totalAmountController.text = totalAmount.toString();
-            });
-          },
-        ),
-      ),
-    );
+  void _removeExpense(int index){
+    total = total - expenses[index].amount;
+    Expense exp = Expense(expenses[index].id, expenses[index].amount,
+        expenses[index].desc, expenses[index].dateTime);
 
-    // Check if the user made changes before updating the date-time
-    if (editedExpense != null && editedExpense.dateTime != expenses[index].dateTime) {
-      // Show date and time picker
-      _selectDateAndTime(index);
-    }
-  }
-
-// Select date and time
-  void _selectDateAndTime(int index) async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-    );
-
-    final TimeOfDay? pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-
-    if (pickedDate != null && pickedTime != null) {
-      setState(() {
-        String newDateTime =
-            "${pickedDate.year}-${pickedDate.month}-${pickedDate.day} "
-            "${pickedTime.hour}:${pickedTime.minute}:00";
-
-        totalAmountController.text = totalAmount.toString();
-        expenses[index].dateTime = newDateTime;
-      });
-    }
-  }
-
-  void _removeExpense(int index) async {
-    if (expenses[index].id != null) {
-      bool deleteSuccess = await expenses[index].delete();
-
-      if (deleteSuccess) {
-        setState(() {
-          totalAmount -= expenses[index].amount;
-          totalAmountController.text = totalAmount.toString();
-          expenses.removeAt(index); // Remove from the list immediately
-        });
-      } else {
-        // Handle deletion failure if needed
-        print("Failed to delete expense.");
-      }
-    }
+    exp.delete();
+    setState(() {
+      expenses.removeAt(index);
+      totalController.text = total.toString();
+    });
   }
 
   void _showMessage(String msg){
-    if (mounted) {
-      //make sure this context is still mounted/exist
+    if(mounted){
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg),
+            content: Text(msg)
         ),
       );
     }
   }
 
-  _selectDate() async {
+  void _editExpense(int index)
+  {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context)=> EditExpenseScreen(
+            expense: expenses[index],
+            onSave: (editedExpense){
+              setState(() {
+                total += editedExpense.amount - expenses[index].amount;
+                expenses[index] = editedExpense;
+                totalController.text = total.toString();
+              });
+            }
+        ),
+      ),
+    );
+  }
+
+  // new function - Date and time picker on textfield
+  _selectDate() async{
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -157,28 +134,31 @@ class _ExpenseListState extends State<ExpenseList> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
-    if (pickedDate != null && pickedTime != null){
+    if(pickedDate!=null && pickedTime != null){
       setState(() {
         txtDateController.text =
-        "${pickedDate.year}-${pickedDate.month}-${pickedDate.day}"
+        "${pickedDate.year}-${pickedDate.month}-${pickedDate.day} "
             "${pickedTime.hour}:${pickedTime.minute}:00";
       });
     }
   }
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+    WidgetsBinding.instance?.addPostFrameCallback((timeStamp) async {
       _showMessage("Welcome ${widget.username}");
+
+      totalController.clear();
 
       RequestController req = RequestController(
           path: "/api/timezone/Asia/Kuala_Lumpur",
           server: "http://worldtimeapi.org");
-      req.get().then((value) {
+      req.get().then((value){
         dynamic res = req.result();
-        txtDateController.text =
-            res["datetime"].toString().substring(0, 19).replaceAll('T', ' ');
+        txtDateController.text = res["datetime"].toString().substring(0,19).replaceAll('T', ' ');
       });
+
       expenses.addAll(await Expense.loadAll());
 
       setState(() {
@@ -186,230 +166,262 @@ class _ExpenseListState extends State<ExpenseList> {
       });
     });
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Daily Expenses'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(
-                labelText: 'Description',
+        appBar: AppBar(
+          title: Text('Daily Expenses'),
+
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                ),
               ),
             ),
-          ),
 
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: amountController,
-              decoration: InputDecoration(
-                labelText: 'Amount(RM)',
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: amountController,
+                decoration: InputDecoration(
+                  labelText: 'Amount (RM)',
+                ),
               ),
             ),
-          ),
-          Padding(
-            //new textfield for the date and time
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              keyboardType: TextInputType.datetime,
-              controller: txtDateController,
-              readOnly: true,
-              onTap: _selectDate,
-              decoration: const InputDecoration(
-                  labelText: 'Date and Time'),
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                keyboardType: TextInputType.datetime,
+                controller: txtDateController,
+                readOnly: true,
+                onTap: _selectDate,
+                decoration: const InputDecoration(
+                    labelText: "Date"
+                ),
+              ),
             ),
-          ),
 
-          Padding(
-            //new textfield for the date and time
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: totalAmountController,
-              readOnly: true,
-              decoration: InputDecoration(labelText: 'Total Spend(RM):'),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: totalController,
+                // enabled: false, //disable from editing text in text field
+                decoration: InputDecoration(
+                  labelText: 'Total Spend (RM)',
+                ),
+              ),
             ),
-          ),
 
-          ElevatedButton(
-            onPressed: _addExpense,
-            child: Text('Add Expense'),
-          ),
+            ElevatedButton(
+                onPressed: _addExpense,
+                child: Text('Add Expense')
+            ),
 
-          Container(
-            child: _buildListView(),
-          )
-        ],
-      ),
+            Container(
+              child: _buildListView(),
+            ),
+          ],
+        )
     );
   }
 
-  Widget _buildListView(){
+
+  Widget _buildListView() {
     return Expanded(
       child: ListView.builder(
-        itemCount: expenses.length,
-        itemBuilder: (context, index){
-          return Dismissible(
-            key: UniqueKey(),
-            background: Container(
-              color: Colors.red,
-              child: Center(
-                child: Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.white),
+          itemCount: expenses.length,
+          itemBuilder: (context, index) {
+            return Dismissible(
+              key: Key(expenses[index].id.toString()),
+              background: Container(
+                  color: Colors.red,
+                  child: Center(
+                      child: Text("Delete", style: TextStyle(
+                          color: Colors.white
+                      ))
+                  )
+              ),
+              onDismissed: (direction) {
+                _removeExpense(index);
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Item dismissed")));
+              },
+              child: Card(
+                margin: EdgeInsets.all(8),
+                child: ListTile(
+                  title: Text(expenses[index].desc),
+                  subtitle: Row(
+                    children: [
+                      Text('Amount: ${expenses[index].amount}'),
+                      const Spacer(),
+                      Text('Date: ${expenses[index].dateTime}')
+                    ],
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete),
+                    onPressed: ()=> _removeExpense(index),
+                  ),
+                  onLongPress: (){
+                    _editExpense(index);
+                  },
                 ),
               ),
-            ),
-            onDismissed: (direction) {
-              setState(() {
-                totalAmount -= expenses[index].amount;
-                totalAmountController.text = totalAmount.toString();
-                expenses.removeAt(index); // Remove from the list immediately
-              });
-            },
-            child: Card(
-              margin: EdgeInsets.all(8.0),
-              child: ListTile(
-                title: Text(expenses[index].desc),
-                subtitle: Row(
-                  children: [
-                    Text('Amount: ${expenses[index].amount}'),
-                    const Spacer(),
-                    Text('Date: ${expenses[index].dateTime}')
-                  ],
-                ),
-                trailing: IconButton(
-                  icon: Icon(Icons.delete),
-                  onPressed: () => _removeExpense(index),
-                ),
-                onLongPress: (){
-                  _editExpense(index);
-                },
-              ),
-            ),
-          );
-        },
+            );
+          }
       ),
     );
   }
-
-
 }
 
-class EditExpenseScreen extends StatelessWidget {
+
+
+class EditExpenseScreen extends StatefulWidget {
+  //const EditExpenseScreen({super.key});
   final Expense expense;
   final Function(Expense) onSave;
 
   EditExpenseScreen({required this.expense, required this.onSave});
 
+  @override
+  State<EditExpenseScreen> createState() => _EditExpenseScreenState();
+}
 
+class _EditExpenseScreenState extends State<EditExpenseScreen> {
   final TextEditingController descController = TextEditingController();
+
   final TextEditingController amountController = TextEditingController();
-  final TextEditingController dateTimeController = TextEditingController();
+
+  final TextEditingController txtDateController = TextEditingController();
+
+  final TextEditingController idController = TextEditingController();
+
+  ImagePicker picker = ImagePicker();
+  File? _image;
+
+  _getFromCamera() async {
+    final pickedFile = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _image = File(pickedFile.path);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Initialize the controllers with the current expense details
-    descController.text = expense.desc;
-    amountController.text = expense.amount.toString();
-    dateTimeController.text = expense.dateTime;
+
+    descController.text = widget.expense.desc;
+    amountController.text = widget.expense.amount.toString();
+    txtDateController.text = widget.expense.dateTime;
+    idController.text = widget.expense.id.toString();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Edit Expense'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: descController,
-              decoration: InputDecoration(
-                labelText: 'Description',
+        appBar: AppBar(
+          title: Text('Edit Expense'),
+        ),
+        body:
+        Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                  controller: descController,
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                  )
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: amountController,
-              decoration: InputDecoration(
-                labelText: 'Amount(RM)',
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            //child: GestureDetector(
-            // onTap: () {
-            //  _selectDateAndTime(context);
-            // },
-            child: TextField(
-              controller: dateTimeController,
-              readOnly: true,
-              onTap: () {
-                _selectDateAndTime(context);
-              },
-              decoration: InputDecoration(
-                labelText: 'Date and Time',
-              ),
-            ),
-            //),
 
-          ),
-          ElevatedButton(
-            onPressed: () async  {
-              // Save the edited expense details
-              Expense updatedExpense = Expense.edit(
-                  expense.id,
-                  double.parse(amountController.text),
-                  descController.text,
-                  dateTimeController.text);
-              onSave(
-                  updatedExpense
-              );
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                  controller: amountController,
+                  decoration: InputDecoration(
+                    labelText: 'Amount (RM)',
+                  )
+              ),
+            ),
 
-              if (await updatedExpense.update()){
-                print("success");
-              }
-              else{
-                print("not success");
-              };
-              // Navigate back to the ExpenseList screen
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                keyboardType: TextInputType.datetime,
+                controller: txtDateController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                    labelText: "Date"
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Stack(
+                children: [
+                  Container(
+                    width: 130, height: 130,
+                    decoration: BoxDecoration(
+                        border: Border.all(width: 4, color: Colors.white),
+                        boxShadow: [
+                          BoxShadow(
+                              spreadRadius: 2, blurRadius: 10, color: Colors.black.withOpacity(0.1)
+                          ),
+                        ],
+                        shape: BoxShape.circle,
+                        image: _image != null
+                            ? DecorationImage(
+                            fit: BoxFit.cover,
+                            image: FileImage(_image!)
+                        )
+                            : DecorationImage(
+                            fit: BoxFit.cover,
+                            image: AssetImage("assets/dailyExpenses.png")
+                        )
+                    ),
+                  ),
+
+                  Positioned(
+                      child: Column(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                            child: IconButton(
+                                onPressed: () async{
+                                  _getFromCamera();
+                                },
+                                icon: const Icon(Icons.photo_camera)
+                            ),
+                          ),
+                        ],
+                      )
+                  )
+                ],
+              ),
+            ),
+
+            ElevatedButton(onPressed: () async{
+              Expense exp = Expense(int.parse(idController.text),double.parse(amountController.text), descController.text, txtDateController.text);
+              widget.onSave(exp);
+              await exp.update();
               Navigator.pop(context);
-            },
-            child: Text('Save'),
-          ),
-        ],
-      ),
+            }, child: Text("Save"))
+          ],
+        )
     );
-  }
-
-  _selectDateAndTime(BuildContext context) async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-    );
-
-    final TimeOfDay? pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-
-    if (pickedDate != null && pickedTime != null) {
-      String newDateTime =
-          "${pickedDate.year}-${pickedDate.month}-${pickedDate.day} "
-          "${pickedTime.hour}:${pickedTime.minute}:00";
-
-      dateTimeController.text = newDateTime;
-    }
   }
 }
 
